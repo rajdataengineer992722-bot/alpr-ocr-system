@@ -1,0 +1,78 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
+outputs/logs/*
+!outputs/logs/.gitkeep
+
+# ALPR outputs
+outputs/crops/*
+outputs/processed/*
+outputs/segmented/*
+outputs/annotated/*
+outputs/api_results/*
+outputs/debug/*
+!outputs/**/.gitkeep
+
+# Datasets and generated data
+data/raw/*
+data/processed/*
+data/chars/*
+!data/**/.gitkeep
+
+# Model weights and large artifacts
+models/**/*.pt
+models/**/*.pth
+models/**/*.onnx
+models/**/*.engine
+models/**/*.weights
+models/**/*.h5
+!models/**/.gitkeep
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
