@@ -103,6 +103,52 @@ class ALPRSystem:
 
         return artifacts
 
+    def _score_ocr_candidate(self, text: str, confidence: float) -> tuple[float, float, int]:
+        """Rank OCR candidates by confidence first, then by usable text length."""
+
+        normalized_text = self.postprocessor.clean_text(text)
+        return (float(confidence), min(len(normalized_text), 10), len(normalized_text))
+
+    def _run_tesseract_ocr(self, plate_crop: np.ndarray) -> tuple[str, float, np.ndarray]:
+        """Try a few OCR-friendly variants and keep the strongest Tesseract result."""
+
+        grayscale = plate_crop if plate_crop.ndim == 2 else cv2.cvtColor(plate_crop, cv2.COLOR_BGR2GRAY)
+        resized = cv2.resize(
+            grayscale,
+            (360, max(1, int(grayscale.shape[0] * (360 / max(1, grayscale.shape[1]))))),
+            interpolation=cv2.INTER_CUBIC,
+        )
+        enhanced = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(resized)
+        processed = self.preprocessor.for_tesseract(plate_crop)
+
+        variants = [
+            ("enhanced", enhanced),
+            ("processed", processed),
+            ("resized_gray", resized),
+        ]
+
+        best_text = ""
+        best_confidence = 0.0
+        best_image = processed
+        best_score = (-1.0, 0.0, 0)
+
+        for variant_name, variant_image in variants:
+            text, confidence = self.tesseract.recognize(variant_image)
+            score = self._score_ocr_candidate(text, confidence)
+            logger.debug(
+                "Tesseract variant={} text='{}' confidence={:.4f}",
+                variant_name,
+                text,
+                confidence,
+            )
+            if score > best_score:
+                best_text = text
+                best_confidence = confidence
+                best_image = variant_image
+                best_score = score
+
+        return best_text, best_confidence, best_image
+
     def process_plate(
         self,
         detection: PlateDetection,
@@ -143,12 +189,10 @@ class ALPRSystem:
                     frame_index,
                     plate_index,
                 )
-                processed_plate = self.preprocessor.for_tesseract(plate_crop)
-                raw_text, ocr_confidence = self.tesseract.recognize(processed_plate)
+                raw_text, ocr_confidence, processed_plate = self._run_tesseract_ocr(plate_crop)
                 segmented_chars = []
         else:
-            processed_plate = self.preprocessor.for_tesseract(plate_crop)
-            raw_text, ocr_confidence = self.tesseract.recognize(processed_plate)
+            raw_text, ocr_confidence, processed_plate = self._run_tesseract_ocr(plate_crop)
 
         final_text, is_valid, candidates = self.postprocessor.process(raw_text)
         combined_confidence = round((float(detection.confidence) + float(ocr_confidence)) / 2.0, 4)
@@ -565,7 +609,8 @@ def _log_summary(payload: Dict[str, Any], mode_name: str) -> None:
         logger.info("Annotated output: {}", payload["annotated_path"])
     if payload.get("csv_path"):
         logger.info("CSV log: {}", payload["csv_path"])
-    logger.debug("Full payload:\n{}", json.dumps(payload, indent=2))
+    debug_payload = {key: value for key, value in payload.items() if key != "annotated_image"}
+    logger.debug("Full payload:\n{}", json.dumps(debug_payload, indent=2, default=str))
 
 
 def main() -> None:

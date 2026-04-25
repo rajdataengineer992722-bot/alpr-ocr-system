@@ -69,6 +69,8 @@ models/**/*.engine
 models/**/*.weights
 models/**/*.h5
 !models/**/.gitkeep
+!models/yolo/license_plate_detector.pt
+!models/cnn/character_cnn.pt
 
 # Temporary files
 tmp/

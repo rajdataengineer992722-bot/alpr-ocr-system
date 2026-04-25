@@ -58,6 +58,20 @@ class PlatePreprocessor:
         clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
         return clahe.apply(gray)
 
+    def _trim_border(self, image: np.ndarray, margin_ratio: float = 0.04) -> np.ndarray:
+        """Remove a small outer border that often contains plate frames or bolts."""
+
+        height, width = image.shape[:2]
+        if height < 12 or width < 24:
+            return image
+
+        x_margin = max(1, int(width * margin_ratio))
+        y_margin = max(1, int(height * margin_ratio))
+        trimmed = image[y_margin:height - y_margin, x_margin:width - x_margin]
+        if trimmed.size == 0:
+            return image
+        return trimmed
+
     def preprocess_for_tesseract(self, plate_image: np.ndarray) -> np.ndarray:
         """Preprocess a plate crop for direct Tesseract OCR."""
 
@@ -67,28 +81,31 @@ class PlatePreprocessor:
         gray = self._to_grayscale(plate_image)
         self._record("01_gray", gray)
 
-        resized = self._resize_keep_aspect(gray, target_width=360)
-        self._record("02_resized", resized)
+        trimmed = self._trim_border(gray)
+        self._record("02_trimmed", trimmed)
+
+        resized = self._resize_keep_aspect(trimmed, target_width=360)
+        self._record("03_resized", resized)
 
         contrast = self._enhance_contrast(resized)
-        self._record("03_contrast", contrast)
+        self._record("04_contrast", contrast)
 
         denoised = cv2.bilateralFilter(contrast, d=9, sigmaColor=25, sigmaSpace=25)
-        self._record("04_denoised", denoised)
+        self._record("05_denoised", denoised)
 
         thresholded = cv2.adaptiveThreshold(
             denoised,
             255,
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY,
-            31,
-            11,
+            21,
+            8,
         )
-        self._record("05_adaptive_threshold", thresholded)
+        self._record("06_adaptive_threshold", thresholded)
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
         morphed = cv2.morphologyEx(thresholded, cv2.MORPH_CLOSE, kernel, iterations=1)
-        self._record("06_morph_close", morphed)
+        self._record("07_morph_close", morphed)
 
         return morphed
 
@@ -101,24 +118,27 @@ class PlatePreprocessor:
         gray = self._to_grayscale(plate_image)
         self._record("01_gray", gray)
 
-        resized = self._resize_keep_aspect(gray, target_width=300)
-        self._record("02_resized", resized)
+        trimmed = self._trim_border(gray)
+        self._record("02_trimmed", trimmed)
+
+        resized = self._resize_keep_aspect(trimmed, target_width=320)
+        self._record("03_resized", resized)
 
         contrast = self._enhance_contrast(resized)
-        self._record("03_contrast", contrast)
+        self._record("04_contrast", contrast)
 
         blurred = cv2.GaussianBlur(contrast, (5, 5), 0)
-        self._record("04_gaussian_blur", blurred)
+        self._record("05_gaussian_blur", blurred)
 
         _, thresholded = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-        self._record("05_otsu_threshold", thresholded)
+        self._record("06_otsu_threshold", thresholded)
 
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
         opened = cv2.morphologyEx(thresholded, cv2.MORPH_OPEN, kernel, iterations=1)
-        self._record("06_morph_open", opened)
+        self._record("07_morph_open", opened)
 
-        cleaned = cv2.dilate(opened, kernel, iterations=1)
-        self._record("07_dilate", cleaned)
+        cleaned = cv2.medianBlur(opened, 3)
+        self._record("08_median_blur", cleaned)
 
         return cleaned
 
